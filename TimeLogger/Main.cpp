@@ -149,7 +149,7 @@ void loadData(BasicList * display) {
 			}
 		}
 	}
-	else MessageBox(NULL, "Time Logger", "No data file found", MB_ICONERROR | MB_OK);
+	else MessageBox(NULL, "No data file found", "Time Logger", MB_ICONERROR | MB_OK);
 }
 void update() {
 	HWND wind = FindWindow("eventHandlerWindow", "handler");
@@ -201,9 +201,10 @@ int main() {
 	void * labels[6] = { info, id, percentLabel, percent, relInfo, activeInfo };
 	list->selectCallback(selectCallback, (void*)labels);
 	loadData(list);
-	wind.addEventListener(new EventListener([list](EventParams p) {
+	wind.addEventListener(new EventListener([list, &wind](EventParams p) {
 		list->clearCells();
 		loadData(list);
+		wind.invalidateDisplay(false);
 	}, CWM_REFRESHED));
 	while (true) {
 		MSG msg;

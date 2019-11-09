@@ -25,7 +25,7 @@ BOOL CALLBACK enumWindowsProc(HWND hwnd, LPARAM lParam) {
 	void ** args = reinterpret_cast<void**>(lParam);
 	std::vector<size_t> * v = reinterpret_cast<std::vector<size_t>*>(args[0]);
 	HWND fgWnd = reinterpret_cast<HWND>(args[1]);
-	auto processes = *reinterpret_cast<std::unordered_map<std::wstring, processInfo>*>(args[2]);
+	auto processes = reinterpret_cast<std::unordered_map<std::wstring, processInfo>*>(args[2]);
 	clock_t lastCheck = *reinterpret_cast<clock_t*>(args[3]);
 	if (style & WS_VISIBLE) {
 		HANDLE handle = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_VM_READ, FALSE, pid);
@@ -36,14 +36,14 @@ BOOL CALLBACK enumWindowsProc(HWND hwnd, LPARAM lParam) {
 		std::hash<std::wstring> h;
 		size_t hash = h(wstr);
 		if (std::find(v->cbegin(), v->cend(), hash) == v->cend()) {
-			if (processes.find(wstr) != processes.end()) {
+			if (processes->find(wstr) != processes->end()) {
 				unsigned int addTime = (clock() - lastCheck) / CLOCKS_PER_SEC / 60;
-				processes[wstr].total += addTime;
-				processes[wstr].timer += addTime;
-				if (fgWnd == hwnd) processes[wstr].active += addTime;
+				processes->at(wstr).total += addTime;
+				processes->at(wstr).timer += addTime;
+				if (fgWnd == hwnd) processes->at(wstr).active += addTime;
 			}
 			else
-				processes.emplace(wstr, processInfo{ 1, 1, 1 });
+				processes->emplace(wstr, processInfo{ 1, 1, 1 });
 			v->push_back(hash);
 		}
 
@@ -64,6 +64,7 @@ void saveData(unsigned int totalTime, const std::unordered_map<std::wstring, pro
 void loadData(unsigned int & totalTime, std::unordered_map<std::wstring, processInfo> & processes) {
 	struct stat buffer;
 	if (stat("data.txt", &buffer) == 0) {
+//		printf("Load\n");
 		std::wifstream in("data.txt");
 		std::wstring str;
 		std::getline(in, str);
@@ -140,11 +141,11 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 			if (msg.message == WM_TIMER || msg.message == WM_QUERYENDSESSION || msg.message == WM_POWERBROADCAST || msg.message == CWM_UPDATE) {
 				HWND fg = GetForegroundWindow();
 				std::vector<size_t> v;
-				void * args[4] = { &v, fg, &processes, &totalTime };
+				void * args[4] = { &v, fg, &processes, &lastCheck };
 				EnumWindows(enumWindowsProc, reinterpret_cast<LPARAM>(args));
 				totalTime += (clock() - lastCheck) / CLOCKS_PER_SEC / 60;
 				lastCheck = clock();
-//				printf("Updating");
+//				printf("Updating\n");
 			}
 			DispatchMessage(&msg);
 		}
