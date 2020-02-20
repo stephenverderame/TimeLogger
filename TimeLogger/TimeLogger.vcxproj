@@ -70,7 +70,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <IncludePath>C:\Users\stephen\Documents\Visual Studio 2015\Projects\Puzzle Solver + GDI API\GDI API;$(IncludePath)</IncludePath>
-    <LibraryPath>C:\Users\stephen\Documents\Visual Studio 2015\Projects\Puzzle Solver + GDI API\Release;$(LibraryPath)</LibraryPath>
+    <LibraryPath>C:\Users\stephen\Documents\Visual Studio 2015\Projects\Puzzle Solver + GDI API\Debug;$(LibraryPath)</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <IncludePath>C:\Users\stephen\Documents\Visual Studio 2015\Projects\Puzzle Solver + GDI API\GDI API;$(IncludePath)</IncludePath>
