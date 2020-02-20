@@ -51,15 +51,58 @@ BOOL CALLBACK enumWindowsProc(HWND hwnd, LPARAM lParam) {
 	}
 	return TRUE;
 }
-void saveData(unsigned int totalTime, const std::unordered_map<std::wstring, processInfo> & processes) {
-//	printf("Save\n");
-	std::wofstream out;
-	out.open("data.txt");
+void saveData(unsigned int totalTime, const std::unordered_map<std::wstring, processInfo> & processes, HANDLE file = INVALID_HANDLE_VALUE) {
+	printf("Save\n");
+	MessageBeep(MB_ICONERROR);
+//	MessageBox(NULL, "Saving data!", "", MB_OK);
+	std::wofstream out("data.txt");
 	out << totalTimeKey << ':' << totalTime << ";0-0\n";
 	for (auto it : processes) {
 		out << it.first << ':' << it.second.total << ';' << it.second.timer << '-' << it.second.active << '\n';
 	}
+/*	bool create = file == INVALID_HANDLE_VALUE;
+	if (create) {
+		file = CreateFile("data.txt", GENERIC_READ | GENERIC_WRITE, NULL, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+	}
+	printf("%d %d\n", out.str().size(), lstrlenW(out.str().c_str()));
+	DWORD written = 0, totalBytes = out.str().size() * sizeof(wchar_t);
+	while (written < totalBytes && WriteFile(file, out.str().c_str() + written, totalBytes - written, &written, NULL));
+	printf("Done writing\n");
+	if (create) CloseHandle(file);*/
 	out.close();
+	printf("Done writing\n");
+}
+void pipeData(unsigned int totalTime, const const std::unordered_map<std::wstring, processInfo> & processes)
+{
+	printf("Transferring!\n");
+	std::wstringstream out;
+	out << totalTimeKey << ':' << totalTime << ";0-0\n";
+	for (auto it : processes) {
+		out << it.first << ':' << it.second.total << ';' << it.second.timer << '-' << it.second.active << '\n';
+	}
+	std::wstring str = out.str();
+	HANDLE pipe = CreateNamedPipeW(L"\\\\.\\pipe\\RunningProcessesPipe", PIPE_ACCESS_OUTBOUND, PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT, 1, 1000, 1000, 0, NULL);
+	if (pipe != INVALID_HANDLE_VALUE) {
+		HWND wnd = FindWindow(NULL, "Time Logger");
+		if (wnd) {
+			PostMessage(wnd, CWM_REFRESHED, 0, 0);
+		}
+		if (ConnectNamedPipe(pipe, NULL)) {
+			printf("Client connected!\n");
+			DWORD writtenBytes = 0;
+			BOOL success = TRUE;
+			do {
+				DWORD b;
+				success = WriteFile(pipe, str.c_str() + writtenBytes / 2, str.size() * 2 - writtenBytes, &b, NULL);
+				writtenBytes += b;
+			} while (success && writtenBytes < str.size() * 2);
+			printf("Done writing\n");
+			FlushFileBuffers(pipe); //wait for read to finish
+			printf("Client finished\n");
+			DisconnectNamedPipe(pipe);
+			CloseHandle(pipe);
+		}
+	}
 }
 void loadData(unsigned int & totalTime, std::unordered_map<std::wstring, processInfo> & processes) {
 	struct stat buffer;
@@ -103,14 +146,21 @@ LRESULT CALLBACK eventHandler(HWND wnd, UINT msg, WPARAM w, LPARAM l) {
 			return TRUE;
 		}
 		else if (msg == CWM_UPDATE) {
-//			printf("update!");
-			saveData(totalTime, *processes);
-			HWND wnd = FindWindow(NULL, "Time Logger");
+			printf("update!\n");
+			pipeData(totalTime, *processes);
+/*			HWND wnd = FindWindow(NULL, "Time Logger");
 			if (wnd) {
 				PostMessage(wnd, CWM_REFRESHED, 0, 0);
-			}
-//			else printf("Can't send update!\n");
+			}*/
 			return TRUE;
+		}
+		else if (msg == WM_TIMER) {
+			auto lastBackup = reinterpret_cast<clock_t*>(data[2]);
+			if (clock() - *lastBackup > CLOCKS_PER_SEC * 3600) {
+				saveData(totalTime, *processes);
+				clock_t t = clock();
+				memcpy(lastBackup, &t, sizeof(clock_t));
+			}
 		}
 	}
 //	else printf("Data is null!\n");
@@ -127,9 +177,11 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 	HWND wnd = CreateWindow(wind.lpszClassName, "handler", WS_OVERLAPPED, 200, 200, 0, 0, NULL, NULL, NULL, NULL);
 	const UINT timerId = 8302;
 	clock_t lastCheck = clock();
-	unsigned int totalTime = 0;
+	unsigned int totalTime = 1;
 	std::unordered_map<std::wstring, processInfo> processes;
-	void * wndArgs[2] = { &totalTime, &processes };
+	clock_t lastBackup = clock();
+	void * wndArgs[3] = { &totalTime, &processes, &lastBackup };
+	SetLastError(0); //Clear error
 	if(SetWindowLongPtr(wnd, GWL_USERDATA, reinterpret_cast<LONG_PTR>(wndArgs)) == 0) printf("Failed to set wnd data %d\n", GetLastError());
 	loadData(totalTime, processes);
 	while (true) {

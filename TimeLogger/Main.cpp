@@ -1,4 +1,5 @@
 #pragma comment(lib, "Version.lib")
+#define _CRT_SECURE_NO_WARNINGS
 #include <window.h>
 #include <Psapi.h>
 #include <BasicList.h>
@@ -11,6 +12,7 @@
 #include <Page.h>
 #include <string>
 #include <unordered_map>
+#include <ShlObj.h>
 #define CWM_RESET_TIMER 0x700
 #define CWM_UPDATE 0x800
 #define CWM_REFRESHED 0x900
@@ -31,10 +33,11 @@ void addItem(BasicList * list, std::wstring path, unsigned int time, unsigned in
 	unsigned int s;
 	VerQueryValueW(buffer.get(), L"\\VarFileInfo\\Translation", reinterpret_cast<void**>(&fileLang), &s);
 	if (!fileLang) {
-		path = path.substr(path.find_last_of('\\') + 1);
+		path = path.substr(path.find_last_of(L'\\') + 1);
 		int size = WideCharToMultiByte(CP_UTF8, 0, (wchar_t*)path.c_str(), path.size(), NULL, 0, NULL, NULL);
-		auto name = std::make_unique<char[]>(size);
+		auto name = std::make_unique<char[]>(size + 1);
 		WideCharToMultiByte(CP_UTF8, 0, (wchar_t*)path.c_str(), path.size(), name.get(), size, NULL, NULL);
+		name[size] = '\0';
 		auto cell = new ListCell(new Text(26, 0, size * 10, name.get()), nullptr);
 		cell->userData = reinterpret_cast<void*>(time);
 		list->addCell(cell);
@@ -57,8 +60,9 @@ void addItem(BasicList * list, std::wstring path, unsigned int time, unsigned in
 	Image * img = new Image(iconInfo.hbmColor);
 	if (fileDesc) {
 		int size = WideCharToMultiByte(CP_UTF8, 0, (wchar_t*)fileDesc, fileDescLen, NULL, 0, NULL, NULL);
-		auto name = std::make_unique<char[]>(size);
+		auto name = std::make_unique<char[]>(size + 1);
 		WideCharToMultiByte(CP_UTF8, 0, (wchar_t*)fileDesc, fileDescLen, name.get(), size, NULL, NULL);
+		name[size] = '\0';
 		auto cell = new ListCell(new Text(iconData.bmWidth + 10, 0, size * 10, name.get()), img);
 		cell->userData = reinterpret_cast<void*>(time);
 		list->addCell(cell);
@@ -68,8 +72,9 @@ void addItem(BasicList * list, std::wstring path, unsigned int time, unsigned in
 	else {
 		std::wstring exe = path.substr(path.find_last_of(L'\\') + 1);
 		int size = WideCharToMultiByte(CP_UTF8, 0, exe.c_str(), exe.size(), NULL, 0, NULL, NULL);
-		auto name = std::make_unique<char[]>(size);
+		auto name = std::make_unique<char[]>(size + 1);
 		WideCharToMultiByte(CP_UTF8, 0, exe.c_str(), exe.size(), name.get(), size, NULL, NULL);
+		name[size] = '\0';
 		auto cell = new ListCell(new Text(iconData.bmWidth + 10, 0, size * 10, name.get()), img);
 		cell->userData = reinterpret_cast<void*>(time);
 		list->addCell(cell);
@@ -129,27 +134,61 @@ void selectCallback(int index, BasicList * list, void * data) {
 	selectedItem = cell->txt->msg;
 
 }
-void loadData(BasicList * display) {
+void loadData(BasicList * display, bool fromPipe = false) {
+	printf("Load data!\n");
+	std::wstringstream in;
 	struct stat fs;
-	if (stat("data.txt", &fs) == 0) {
+	if (!fromPipe && stat("data.txt", &fs) == 0) {
+//	HANDLE pipe = CreateFile(TEXT("\\\\.\\pipe\\ProcessPipe"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+//	if(pipe != INVALID_HANDLE_VALUE){
 		printf("Loading data\n");
-		std::wifstream in("data.txt");
-		std::wstring str;
-		while (std::getline(in, str)) {
-			std::wstring path = str.substr(0, str.find_last_of(L':'));
-			std::wstring totalTime = str.substr(str.find_last_of(L':') + 1, str.find_last_of(L';'));
-			std::wstring relTime = str.substr(str.find_last_of(L';') + 1, str.find_first_of(L'-'));
-			std::wstring actTime = str.substr(str.find_last_of(L'-') + 1);
-			unsigned int time = std::stoi(totalTime);
-			unsigned int rTime = std::stoi(relTime);
-			unsigned int aTime = std::stoi(actTime);
-			addItem(display, path, time, rTime, aTime);
-			if (path == L"Total Runtime") {
-				TOTAL_TIME = time;
-			}
+		std::wifstream iStream("data.txt");
+		in << iStream.rdbuf();
+//		std::wstringstream in;
+/*		char buffer[2002];
+		DWORD readBytes;
+		while (ReadFile(pipe, buffer, 2000, &readBytes, NULL) && readBytes != 0) {
+			buffer[readBytes] = L'\0';
+			in << (wchar_t*)buffer;
+			wprintf(L"%s\n", buffer);
+		}*/
+//		CloseHandle(pipe);
+		printf("Loaded data\n");
+	}
+	else if (fromPipe) {
+		HANDLE pipe = CreateFileW(L"\\\\.\\pipe\\RunningProcessesPipe", GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+		if (pipe != INVALID_HANDLE_VALUE) {
+			printf("Connected to pipe\n");
+			wchar_t buffer[501];
+			DWORD b = 0;
+			BOOL err = 0;
+			do {
+				err = ReadFile(pipe, buffer, 1000, &b, NULL);
+				buffer[b / 2] = L'\0';
+				in << buffer;
+			} while (err && b);
+			CloseHandle(pipe);
+			wprintf(L"%s\n", in.str().c_str());
 		}
 	}
-	else MessageBox(NULL, "No data file found", "Time Logger", MB_ICONERROR | MB_OK);
+	else {
+		MessageBox(NULL, "No data file found", "Time Logger", MB_ICONERROR | MB_OK);
+		return;
+	}
+	std::wstring str;
+	while (std::getline(in, str)) {
+		std::wstring path = str.substr(0, str.find_last_of(L':'));
+		std::wstring totalTime = str.substr(str.find_last_of(L':') + 1, str.find_last_of(L';'));
+		std::wstring relTime = str.substr(str.find_last_of(L';') + 1, str.find_first_of(L'-'));
+		std::wstring actTime = str.substr(str.find_last_of(L'-') + 1);
+		unsigned int time = std::stoi(totalTime);
+		unsigned int rTime = std::stoi(relTime);
+		unsigned int aTime = std::stoi(actTime);
+		addItem(display, path, time, rTime, aTime);
+		if (path == L"Total Runtime") {
+			TOTAL_TIME = time;
+		}
+	}
 }
 void update() {
 	HWND wind = FindWindow("eventHandlerWindow", "handler");
@@ -168,7 +207,42 @@ void sendMSG() {
 		CloseHandle(process);
 	}
 }
-int main() {
+void startupCheck()
+{
+	char path[MAX_PATH];
+	sprintf(path, "%s\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\GettingRunningProcessesShortcut.lnk", getenv("APPDATA"));
+	struct stat file;
+	if (stat(path, &file)) {
+		DWORD choice = MessageBox(NULL, "Background process helper was not found as a startup program. Would you like to add it to start up?", "Time Logger", MB_YESNO | MB_ICONINFORMATION);
+		if (choice == IDYES) {
+			char fPath[MAX_PATH];
+			GetModuleFileName(NULL, fPath, MAX_PATH);
+			int len = strrchr(fPath, '\\') - fPath;
+			fPath[len] = '\0';
+			printf("%s\n", fPath);
+			char bgPath[MAX_PATH];
+			sprintf(bgPath, "%s\\GettingRunningProcesses.exe", fPath);
+			
+			IShellLink* shellLink;
+			CoInitialize(NULL);
+			if(!SUCCEEDED(CoCreateInstance(CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, IID_IShellLink, (void**)&shellLink))) printf("Failed to create com instance\n");
+			shellLink->SetPath(bgPath);
+			shellLink->SetDescription("Logs running programs");
+
+			IPersistFile* file;
+			if(!SUCCEEDED(shellLink->QueryInterface(IID_IPersistFile, (void**)&file))) printf("Failed to query save interface\n");
+			std::wstringstream ss;
+			ss << path;
+			file->Save(ss.str().c_str(), TRUE);
+			printf("Saving shortcut of %s to ", bgPath); wprintf(L"%s\n", ss.str().c_str());
+			file->Release();
+			shellLink->Release();
+			CoUninitialize();
+		}
+	}
+}
+int __stdcall WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
+//int main() {
 	Window wind("Time Logger", CS_DBLCLKS);
 	gui::GUI::bindWindow(wind);
 	wind.use();
@@ -200,21 +274,25 @@ int main() {
 	btn->setClick2(onSearch, classes);
 	void * labels[6] = { info, id, percentLabel, percent, relInfo, activeInfo };
 	list->selectCallback(selectCallback, (void*)labels);
-	loadData(list);
+//	loadData(list);
 	wind.addEventListener(new EventListener([list, &wind](EventParams p) {
 		list->clearCells();
-		loadData(list);
+		loadData(list, true);
 		wind.invalidateDisplay(false);
 	}, CWM_REFRESHED));
+	update();
+	startupCheck();
 	while (true) {
 		MSG msg;
 		while (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
 			TranslateMessage(&msg);
-			if (msg.message == WM_QUIT) return 0;
+			if (msg.message == WM_QUIT) break;
 			DispatchMessage(&msg);
 			mainPage->handleMessage(&msg);
 		}
 	}
+	printf("Loop broke\n");
+	getchar();
 	delete list;
 	delete mainPage;
 }
