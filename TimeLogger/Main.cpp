@@ -24,6 +24,7 @@ unsigned int TOTAL_TIME = 0;
 std::unordered_map<std::string, unsigned int> relTimes;
 std::unordered_map<std::string, unsigned int> activeTimes;
 std::string selectedItem;
+char dataFile[MAX_PATH];
 void addItem(BasicList * list, std::wstring path, unsigned int time, unsigned int rTime, unsigned int aTime) {
 	DWORD size = GetFileVersionInfoSizeW(path.c_str(), NULL);
 	auto buffer = std::make_unique<char[]>(size);
@@ -138,11 +139,11 @@ void loadData(BasicList * display, bool fromPipe = false) {
 	printf("Load data!\n");
 	std::wstringstream in;
 	struct stat fs;
-	if (!fromPipe && stat("data.txt", &fs) == 0) {
+	if (!fromPipe && stat(dataFile, &fs) == 0) {
 //	HANDLE pipe = CreateFile(TEXT("\\\\.\\pipe\\ProcessPipe"), GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
 //	if(pipe != INVALID_HANDLE_VALUE){
 		printf("Loading data\n");
-		std::wifstream iStream("data.txt");
+		std::wifstream iStream(dataFile);
 		in << iStream.rdbuf();
 //		std::wstringstream in;
 /*		char buffer[2002];
@@ -243,6 +244,7 @@ void startupCheck()
 }
 int __stdcall WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 //int main() {
+	sprintf(dataFile, "%s\\TimeLogger\\data.txt", getenv("APPDATA"));
 	Window wind("Time Logger", CS_DBLCLKS);
 	gui::GUI::bindWindow(wind);
 	wind.use();
@@ -292,7 +294,6 @@ int __stdcall WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 		}
 	}
 	printf("Loop broke\n");
-	getchar();
 	delete list;
 	delete mainPage;
 }

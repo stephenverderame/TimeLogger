@@ -18,6 +18,7 @@ const wchar_t * totalTimeKey = L"Total Runtime";
 #define CWM_RESET_TIMER 0x700
 #define CWM_UPDATE 0x800
 #define CWM_REFRESHED 0x900
+char dataFilePath[MAX_PATH];
 BOOL CALLBACK enumWindowsProc(HWND hwnd, LPARAM lParam) {
 	DWORD pid;
 	GetWindowThreadProcessId(hwnd, &pid);
@@ -55,7 +56,7 @@ void saveData(unsigned int totalTime, const std::unordered_map<std::wstring, pro
 	printf("Save\n");
 	MessageBeep(MB_ICONERROR);
 //	MessageBox(NULL, "Saving data!", "", MB_OK);
-	std::wofstream out("data.txt");
+	std::wofstream out(dataFilePath);
 	out << totalTimeKey << ':' << totalTime << ";0-0\n";
 	for (auto it : processes) {
 		out << it.first << ':' << it.second.total << ';' << it.second.timer << '-' << it.second.active << '\n';
@@ -106,9 +107,9 @@ void pipeData(unsigned int totalTime, const const std::unordered_map<std::wstrin
 }
 void loadData(unsigned int & totalTime, std::unordered_map<std::wstring, processInfo> & processes) {
 	struct stat buffer;
-	if (stat("data.txt", &buffer) == 0) {
+	if (stat(dataFilePath, &buffer) == 0) {
 //		printf("Load\n");
-		std::wifstream in("data.txt");
+		std::wifstream in(dataFilePath);
 		std::wstring str;
 		std::getline(in, str);
 		totalTime = std::stoi(str.substr(str.find_last_of(L':') + 1, str.find_last_of(L';')));
@@ -168,6 +169,7 @@ LRESULT CALLBACK eventHandler(HWND wnd, UINT msg, WPARAM w, LPARAM l) {
 }
 int __stdcall WinMain(HINSTANCE, HINSTANCE, LPSTR, int) {
 //int main() {
+	sprintf(dataFilePath, "%s\\TimeLogger\\data.txt", getenv("APPDATA"));
 	WNDCLASSEX wind;
 	ZeroMemory(&wind, sizeof(wind));
 	wind.cbSize = sizeof(WNDCLASSEX);
